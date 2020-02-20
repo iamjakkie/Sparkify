@@ -6,9 +6,21 @@ from sql_queries import *
 
 
 def process_song_file(cur, filepath):
+    """
+    Description: This function can be used to read the file in the filepath
+    to get the song and artist info and used to populate the songs and artists dim tables.
+
+    Arguments:
+    cur: the cursor object.
+    filepath: log data file path.
+
+    Returns:
+    None
+    """
     # open song file
     df = pd.read_json(filepath, typ='series')
     df.drop_duplicates()
+    df.dropna()
     # insert song record
     song_data = list(df[['song_id','title','artist_id','year','duration']].values)
     cur.execute(song_table_insert, song_data)
@@ -19,13 +31,24 @@ def process_song_file(cur, filepath):
 
 
 def process_log_file(cur, filepath):
+    """
+    Description: This function can be used to read the file in the filepath
+    to get the user and time info and used to populate the time and users dim tables
+    and songplays fact table.
+
+    Arguments:
+    cur: the cursor object.
+    filepath: log data file path.
+
+    Returns:
+    None
+    """
     # open log file
     df = pd.read_json(filepath,lines=True)
     df.drop_duplicates()
-
     # filter by NextSong action
     df = df.where(df['page'] == 'NextSong')
-
+    df.dropna()
     # convert timestamp column to datetime
     t = pd.to_datetime(df[['ts']].dropna().apply(lambda x: '%.f' % x, axis=1), unit = 'ms')
 
@@ -39,11 +62,10 @@ def process_log_file(cur, filepath):
 
     # load user table
     user_df = df[['userId','firstName','lastName','gender', 'level']].dropna()
-
     # insert user records
     for i, row in user_df.iterrows():
         cur.execute(user_table_insert, row)
-    df =df.dropna()
+
     # insert songplay records
     for index, row in df.iterrows():
 
@@ -53,15 +75,28 @@ def process_log_file(cur, filepath):
 
         if results:
             songid, artistid = results
+            songplay_data = (index, pd.to_datetime(row.ts), row.userId, row.level, songid, artistid, row.sessionId, row.location, row.userAgent)
+            cur.execute(songplay_table_insert, songplay_data)
         else:
             songid, artistid = None, None
 
-        # insert songplay record
-        songplay_data = (index, pd.to_datetime(row.ts), row.userId, row.level, songid, artistid, row.sessionId, row.location, row.userAgent)
-        cur.execute(songplay_table_insert, songplay_data)
+
 
 
 def process_data(cur, conn, filepath, func):
+    """
+    Description: This function can be used to get all json files
+    and process them one by one.
+
+    Arguments:
+    cur: the cursor object.
+    conn: connection to the database
+    filepath: log data file path.
+    func: defines the function to be used to process the data
+
+    Returns:
+    None
+    """
     # get all files matching extension from directory
     all_files = []
     for root, dirs, files in os.walk(filepath):
